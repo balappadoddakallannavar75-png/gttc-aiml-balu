@@ -52,6 +52,32 @@ const getSemesterWord = (sem: number): string => {
   return map[sem] || `${sem} SEMESTER`;
 };
 
+// Formats the department name properly to avoid duplicate "DIPLOMA IN"
+const getFormattedDiplomaName = (deptName: string): string => {
+  if (!deptName) return "";
+  const upper = deptName.toUpperCase();
+  if (upper.startsWith("DIPLOMA IN")) {
+    return upper;
+  }
+  return `DIPLOMA IN ${upper}`;
+};
+
+// GTTC Official Circular Seal Logo Component
+const GTTCLogo = ({ className = "w-[90px] h-[90px] sm:w-[96px] sm:h-[96px]" }: { className?: string }) => (
+  <div 
+    id="gttc-logo-container"
+    className={`relative flex items-center justify-center aspect-square flex-shrink-0 ${className} mx-auto overflow-hidden rounded-full border border-slate-200/80 bg-white p-1.5 shadow-md transition-all duration-300 hover:scale-105`}
+  >
+    <img 
+      id="gttc-logo-image"
+      src="https://www.gttcmsdc.com/public/nusrat-assets/img/logo2.jpg"
+      alt="GTTC Logo"
+      className="w-full h-full object-contain rounded-full select-none"
+      referrerPolicy="no-referrer"
+    />
+  </div>
+);
+
 // Calculate Max and Min splits for IA/Exam/Total depending on subject maximum
 const getMarksSplits = (subject: any) => {
   const max = subject.maxMarks;
@@ -153,6 +179,37 @@ export default function ResultSheet({ result, onBack }: ResultSheetProps) {
   const handleDownloadPDF = async () => {
     setIsDownloading(true);
     try {
+      // Pre-load official logo image with progressive robust fallbacks
+      let logoImg: HTMLImageElement | null = null;
+      try {
+        // Try loading the high-resolution official logo first
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = "https://www.gttcmsdc.com/public/nusrat-assets/img/logo2.jpg";
+        await new Promise((resolve, reject) => {
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          // Timeout to avoid infinite waiting if network/CORS fails
+          setTimeout(reject, 3000);
+        });
+        logoImg = img;
+      } catch (err1) {
+        console.warn("Failed to pre-load high-res official logo, trying CORS-friendly cached fallback:", err1);
+        try {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.src = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRMpPplcMQvyysOf3p7rTJLPYY_73U2id24RdbnEDC3O7Y9uEi5J1t25f0";
+          await new Promise((resolve, reject) => {
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            setTimeout(reject, 3000);
+          });
+          logoImg = img;
+        } catch (err2) {
+          console.warn("All logo image loads failed for PDF, using vector fallback:", err2);
+        }
+      }
+
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "mm",
@@ -180,24 +237,95 @@ export default function ResultSheet({ result, onBack }: ResultSheetProps) {
       pdf.rect(6.5, 6.5, 197, 284); // Inner elegant border
 
       // 2. Header Block
+      // Draw GTTC Logo Emblem
+      if (logoImg) {
+        // Draw a soft shadow circle behind
+        pdf.setFillColor(245, 247, 250);
+        pdf.circle(105, 20.4, 12.4, "F");
+
+        // Draw a clean circular white container with thin grey border
+        pdf.setFillColor(255, 255, 255);
+        pdf.setDrawColor(226, 232, 240); // slate-200 / thin light grey
+        pdf.setLineWidth(0.35);
+        pdf.circle(105, 20, 12, "FD"); // Centered at 105, 20 with radius 12 mm (diameter 24 mm / ~90px)
+
+        // Render official logo at center (X: 105 - 9.5 = 95.5, Y: 20 - 9.5 = 10.5, W: 19, H: 19)
+        pdf.addImage(logoImg, "PNG", 95.5, 10.5, 19, 19);
+      } else {
+        // Fallback vector drawing if image load fails
+        // Outer border circle
+        pdf.setDrawColor(180, 83, 9); // Amber 700
+        pdf.setLineWidth(0.4);
+        pdf.setFillColor(15, 23, 42); // slate-900 / rich deep blue background
+        pdf.circle(105, 20, 9, "FD"); // Draw filled circle
+        
+        // Secondary concentric golden/amber ring
+        pdf.setDrawColor(217, 119, 6); // Amber 600
+        pdf.setLineWidth(0.2);
+        pdf.circle(105, 20, 8.2, "D");
+
+        // Draw gear teeth around center
+        pdf.setDrawColor(217, 119, 6); // Amber 600
+        pdf.setLineWidth(0.3);
+        for (let i = 0; i < 360; i += 30) {
+          const rad = (i * Math.PI) / 180;
+          const x1 = 105 + 4.5 * Math.cos(rad);
+          const y1 = 20 + 4.5 * Math.sin(rad);
+          const x2 = 105 + 5.5 * Math.cos(rad);
+          const y2 = 20 + 5.5 * Math.sin(rad);
+          pdf.line(x1, y1, x2, y2);
+        }
+        
+        // Draw center gear hub circle
+        pdf.setFillColor(255, 255, 255);
+        pdf.circle(105, 20, 1.2, "F");
+
+        // Draw Diya Lamp inside
+        pdf.setFillColor(245, 158, 11); // Amber 500
+        pdf.setDrawColor(180, 83, 9); // Amber 700
+        pdf.setLineWidth(0.1);
+        pdf.ellipse(105, 21.2, 2.5, 0.9, "F");
+        
+        // Flame
+        pdf.setFillColor(239, 68, 68); // Rose 500/Red
+        pdf.ellipse(105, 19.4, 0.7, 1.4, "F");
+        // Flame core
+        pdf.setFillColor(245, 158, 11); // Amber 500
+        pdf.ellipse(105, 19.6, 0.3, 0.7, "F");
+
+        // Text "GTTC" inside the logo top curved area
+        pdf.setFont("Helvetica", "bold");
+        pdf.setFontSize(5);
+        pdf.setTextColor(245, 158, 11); // Amber 500
+        pdf.text("GTTC", 105, 14.5, { align: "center" });
+
+        // Text "ESTD 1972" bottom
+        pdf.setFontSize(3.5);
+        pdf.setTextColor(203, 213, 225); // slate-300
+        pdf.text("ESTD 1972", 105, 26, { align: "center" });
+      }
+
+      // Reset text color to black for the header text
+      pdf.setTextColor(0, 0, 0);
+
       pdf.setFont("Helvetica", "bold");
       pdf.setFontSize(14);
-      pdf.text("GOVERNMENT TOOL ROOM & TRAINING CENTRE", 105, 18, { align: "center" });
+      pdf.text("GOVERNMENT TOOL ROOM & TRAINING CENTRE", 105, 36, { align: "center" });
 
       pdf.setFont("Helvetica", "normal");
       pdf.setFontSize(9);
-      pdf.text("BELAGAVI - 590010", 105, 23, { align: "center" });
+      pdf.text("BELAGAVI - 590010", 105, 41, { align: "center" });
 
       pdf.setFont("Helvetica", "bold");
       pdf.setFontSize(11);
-      pdf.text("STATEMENT OF MARKS", 105, 31, { align: "center" });
-      pdf.line(78, 32, 132, 32); // Underline statement
+      pdf.text("STATEMENT OF MARKS", 105, 49, { align: "center" });
+      pdf.line(78, 50, 132, 50); // Underline statement
 
       pdf.setFontSize(10);
-      pdf.text(`DIPLOMA IN ${result.departmentName.toUpperCase()}`, 105, 39, { align: "center" });
+      pdf.text(getFormattedDiplomaName(result.departmentName), 105, 57, { align: "center" });
 
       // 3. Metadata Table
-      const metaY = 46;
+      const metaY = 64;
       pdf.setLineWidth(0.35);
       pdf.rect(marginX, metaY, contentWidth, 32);
 
@@ -249,7 +377,7 @@ export default function ResultSheet({ result, onBack }: ResultSheetProps) {
 
 
       // 4. Evaluation Marks Table Header
-      const tableY = 84;
+      const tableY = 102;
       pdf.setLineWidth(0.35);
       pdf.rect(marginX, tableY, contentWidth, 14);
       pdf.line(marginX, tableY + 7, marginX + contentWidth, tableY + 7);
@@ -492,7 +620,10 @@ export default function ResultSheet({ result, onBack }: ResultSheetProps) {
           </div>
 
           {/* Header Block */}
-          <div className="text-center space-y-1 mb-8">
+          <div className="flex flex-col items-center text-center mb-5">
+            <div className="mb-2">
+              <GTTCLogo className="w-[90px] h-[90px] sm:w-[96px] sm:h-[96px]" />
+            </div>
             <h1 className="text-base sm:text-2xl font-bold tracking-wide uppercase text-slate-900 dark:text-slate-100 leading-tight">
               GOVERNMENT TOOL ROOM &amp; TRAINING CENTRE
             </h1>
@@ -505,7 +636,7 @@ export default function ResultSheet({ result, onBack }: ResultSheetProps) {
               </span>
             </div>
             <h2 className="text-[11px] sm:text-sm font-bold tracking-wider text-slate-800 dark:text-slate-200 uppercase pt-1">
-              DIPLOMA IN {result.departmentName.toUpperCase()}
+              {getFormattedDiplomaName(result.departmentName)}
             </h2>
           </div>
 
