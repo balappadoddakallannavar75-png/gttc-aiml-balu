@@ -1,0 +1,6 @@
+{
+  "name": "GTTC Student Result Portal",
+  "description": "A clean, modern, and responsive Student Result Portal for Government Tool Room and Training Centre (GTTC)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
